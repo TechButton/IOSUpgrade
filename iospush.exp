@@ -1,0 +1,189 @@
+#!/usr/bin/expect -f
+
+# Set variables
+#exp_internal -f ERROR 0
+ set hostname [lindex $argv 0]
+ set username [lindex $argv 1]
+ set password [lindex $argv 2]
+
+# Log results
+# log_file -a results.log
+
+# Announce which device we are working on and at what time
+ send_user "\n"
+ send_user ">>>>>  Working on $hostname @ [exec date] <<<<<\n"
+ send_user "\n"
+
+# Don't check keys
+ spawn ssh -o StrictHostKeyChecking=no $username\@$hostname
+
+#Log steps
+ #set Directory /usr/iospush/logs/
+ #log_file -a $Directory/session_$hostname.log 
+ log_user 0
+
+ 
+# Allow this script to handle ssh connection issues
+ expect {
+ timeout { send_user "\nTimeout Exceeded - Check Host\n"; exit 1 }
+ eof { send_user "\nSSH Connection To $hostname Failed\n"; exit 1 }
+ "*#" {}
+ "*assword:" {
+ send "$password\n"
+ }
+ }
+
+
+send "term length 0\r"
+expect "*#"
+send "term length 0\r"
+expect "*#" 
+
+#Checks to see if it has the new code. Then it will tell it to install without reboot
+send "show version\r"
+expect {
+	"03.06.08E" {
+		send "exit\n"
+		send_user "Already Complete"
+		expect ":~\$"
+		exit
+		}
+	"03.06.06E"
+}
+expect "*#"
+send "dir flash:\r"
+expect {
+    "cat3k_caa-universalk9\.SPA\.03\.06\.08\.E\.152-2\.E8\.bin" {
+        expect "*#"
+        send "software install file flash:cat3k_caa-universalk9.SPA.03.06.08.E.152-2.E8.bin on-reboot\r"
+        expect "*#"
+        send "write mem\n"
+        expect "*#"
+        send "exit\n"
+		expect ":~\$"
+		send_user "\n"
+		send_user "Install Complete"
+		send_user "\n"
+		exit
+        }
+	"cat3k_caa-universalk9\.SPA\.03\.06\.04\.E\.152-2\.E4" {
+		expect "*#"
+		send "delete /force /recursive flash:cat3k_caa-iosd-universalk9.SPA.152-2.E4\r"
+		expect "*#"
+		send "delete /force /recursive flash:cat3k_caa-platform.SPA.03.06.04\r"
+		expect "*#"
+		send "delete /force /recursive flash:cat3k_caa-wcm.SPA.10.2.140.0\r"
+		expect "*#"
+		send "delete /force /recursive flash:cat3k_caa-base.SPA.03.06.04.E\r"
+		expect "*#"
+		send "delete /force /recursive flash:cat3k_caa-drivers.SPA.03.06.04.E\r"
+		expect "*#"
+		send "delete /force /recursive flash:cat3k_caa-infra.SPA.03.06.04.E\r"
+		expect "*#"
+		send "delete /force /recursive flash:cat3k_caa-universalk9.SPA.03.06.04.E.152-2.E4.bin\r"
+		expect "*#"
+	
+	}
+}
+set timeout -1
+expect "*#"
+send "software clean\r"
+     expect {
+		"Do you want to proceed with the deletion" {
+		send "yes\r"
+		expect "*#"
+		send "\r"
+		send_user "\n"
+		send_user "Clean Complete"
+		send_user "\n"
+		
+		}
+		"Nothing to clean" {
+		send_user "\n"
+		send_user "Clean"
+		send_user "\n"
+		}
+		}
+
+# checks to see if there are other members in the stack, and if there are it will delete the IOS off of each member.
+#set flash_dirs {}
+#send "dir ?\r"
+#expect {
+#        "flash1:" {
+#                expect {
+#                        -re {\m(flash[0-9])\M} {
+#                                lappend flash_dirs $expect_out(1,string)
+#                                exp_continue
+#                                }
+#                        "*#"
+#                }
+#        }
+#}
+#foreach dir $flash_dirs {
+#send "delete /force /recursive $dir:cat3k_caa-universalk9.SPA.03.06.04.E\r"
+#expect "*#"
+#send "delete /force /recursive $dir:cat3k_caa-universalk9.SPA.03.06.04.E.152-2.E4.bin\r"
+#expect "*#"
+#}
+
+#ftps the IOS to flash. If the FTP fails it tries one more time.
+expect "*#"
+
+send "copy ftp://ios:PASSWORD@FTPSERVER flash:\r"
+expect {
+       "Address or name of remote host" {
+           send "FTPSERVER\r"
+        }
+        "Source filename" {
+            send "cat3k_caa-universalk9.SPA.03.06.08.E.152-2.E8.bin\r"
+            expect "Destination filename"
+            send "\r"			
+            expect "*#"
+            send "\r"
+        }
+		"OK - 305292424/4096 bytes" {
+		send_user "\n"
+		send_user "Copy Complete"
+		send_user "\n"
+		}
+}
+
+expect "*#"
+
+# checks to see if there are other members in the stack, and if there are it will copy the ios from flash1 to the other devices.
+#
+#foreach dir $flash_dirs {
+#    if {$dir eq "flash1"} continue
+#    send "copy flash1:cat3k_caa-universalk9.SPA.03.06.08.E.152-2.E8.bin $dir:\r"
+#    expect "Destination filename"
+#    send "\r"
+#    expect "*#"
+#}
+
+
+send "dir flash:\r"
+expect {
+    "cat3k_caa-universalk9\.SPA\.03\.06\.08\.E\.152-2\.E8\.bin" {
+        expect "*#"
+        send "software install file flash:cat3k_caa-universalk9.SPA.03.06.08.E.152-2.E8.bin on-reboot\r"
+        expect "*#"
+        send "write mem\n"
+        expect "*#"
+        send "exit\n"
+		expect ":~\$"
+		send_user "\n"
+		send_user "Install Complete"
+		send_user "\n"
+		exit
+    }
+}
+send_user "\n"
+send_user "Install Failed"
+send_user "\n"
+expect "*#"
+send "end\n"
+expect "*#"
+send "exit\n"
+expect ":~\$"
+exit
+
